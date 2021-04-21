@@ -44,14 +44,16 @@ public class HookModule implements IXposedHookLoadPackage {
      * Number of bits per Hex digit (4).
      */
     private static final int HEX_DIGIT_BITS = 4;
+
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        getValue();
+        getValue(lpparam);
+
         try {
             if (lpparam.packageName.equals(packageName)) {
                 final Class<?> claszz = lpparam.classLoader.loadClass(className);  //指定类名和包名
-                Log.d(TAG, "已经hook到了指定app" + lpparam.packageName);
-                writeFile("已经hook到了指定app" + lpparam.packageName + "\n");
+                Log.d(TAG, "已经hook到了指定app: " + lpparam.packageName);
+                writeFile("已经hook到了指定app: " + lpparam.packageName + "\n");
                 switch (hookType) {
                     case 0: {
                         Method m = XposedHelpers.findMethodExact(claszz, methodName, paramList);
@@ -60,11 +62,17 @@ public class HookModule implements IXposedHookLoadPackage {
                             protected void beforeHookedMethod(MethodHookParam param) {
                                 Log.d(TAG, "hook到了" + methodName);
                             }
+
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) {
                                 for (int i = 0; i < param.args.length; i++) {
-                                    Log.d(TAG, "参数[" + i + "]:" + param.args[i].toString());
-                                    writeFile("参数[" + i + "]:" + param.args[i].toString() + "\n");
+                                    if (param.args[i] instanceof byte[]) {
+                                        Log.d(TAG, "参数[" + i + "]:" + byteArrayToString((byte[]) param.args[i]));
+                                        writeFile("参数[" + i + "]:(" + byteArrayToString((byte[]) param.args[i]) + ")\n");
+                                    } else {
+                                        Log.d(TAG, "参数[" + i + "]:" + param.args[i].toString());
+                                        writeFile("参数[" + i + "]:" + param.args[i].toString() + "\n");
+                                    }
                                 }
                                 Log.d(TAG, "返回值：" + param.getResult());
                                 writeFile("返回值：" + param.getResult() + "\n");
@@ -79,6 +87,7 @@ public class HookModule implements IXposedHookLoadPackage {
                             protected void beforeHookedMethod(MethodHookParam param) {
                                 Log.d(TAG, "hook到了" + className);
                             }
+
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                                 super.afterHookedMethod(param);
@@ -102,6 +111,7 @@ public class HookModule implements IXposedHookLoadPackage {
             }
         } catch (Exception e) {
             e.printStackTrace();
+            Log.d(TAG, "easyHook: " + e);
         }
     }
 
@@ -154,7 +164,7 @@ public class HookModule implements IXposedHookLoadPackage {
         }
     }
 
-    private void getValue() {
+    private void getValue(XC_LoadPackage.LoadPackageParam lpparam) {
         File sdcardDir = Environment.getExternalStorageDirectory();
         String filePath = sdcardDir.getAbsolutePath() + "/hookTarget.txt";
         try {
@@ -163,8 +173,11 @@ public class HookModule implements IXposedHookLoadPackage {
             String line = bufferedReader.readLine();
             String[] str = line.split("_&_");
             packageName = str[0];
+            // writeFile("找到类名：" + className);
             className = str[1];
+            // writeFile("找到类名：" + className);
             methodName = str[2];
+            // writeFile("找到方法名：" + methodName);
             String params = str[3];
             hookType = Integer.parseInt(str[4]);
             String[] strList = params.split(",");
@@ -197,7 +210,11 @@ public class HookModule implements IXposedHookLoadPackage {
                         paramList[i] = float.class;
                         break;
                     default:
-                        paramList[i] = Class.forName(strList[i]);
+                        try {
+                            paramList[i] = Class.forName(strList[i]);
+                        } catch (Exception e) {
+                            paramList[i] = lpparam.classLoader.loadClass(strList[i]);
+                        }
                         break;
                 }
             }
