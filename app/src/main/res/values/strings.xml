@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">easyHook</string>
     <string name="string">string</string>
-    <string name="tip">提示：\n  1.参数之间用英文符号逗号隔开。\n  2.其他类型的参数请填写完整的类名。例如:("java.util.LinkedHashMap")\n  3.长按悬浮窗可复制hook结果到剪切板。</string>
+    <string name="tip">提示：\n  1.长按悬浮窗可复制hook结果到剪切板。\n  2.现在参数列表可以不用填写了，会根据方法名自动遍历。</string>
 </resources>

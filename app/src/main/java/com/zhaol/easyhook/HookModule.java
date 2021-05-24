@@ -1,5 +1,6 @@
 package com.zhaol.easyhook;
 
+import android.content.Context;
 import android.os.Environment;
 import android.util.Base64;
 import android.util.Log;
@@ -13,7 +14,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Member;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -29,6 +32,7 @@ public class HookModule implements IXposedHookLoadPackage {
     private int hookType = 0;
     private Class<?>[] paramList = null;
     private static final String HEX_DIGITS = "0123456789abcdef";
+    static String strClassName = "";
 
     /**
      * Byte mask.
@@ -47,72 +51,111 @@ public class HookModule implements IXposedHookLoadPackage {
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
-        getValue(lpparam);
-
-        try {
-            if (lpparam.packageName.equals(packageName)) {
-                final Class<?> claszz = lpparam.classLoader.loadClass(className);  //指定类名和包名
+        getValue(lpparam.classLoader);
+        if (lpparam.packageName.equals(packageName)) {
+            try {
                 Log.d(TAG, "已经hook到了指定app: " + lpparam.packageName);
                 writeFile("已经hook到了指定app: " + lpparam.packageName + "\n");
+                final Class<?> claszz = lpparam.classLoader.loadClass(className);  //指定类名和包名
+                getValue(lpparam.classLoader);
                 switch (hookType) {
                     case 0: {
                         Method m = XposedHelpers.findMethodExact(claszz, methodName, paramList);
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
-                                Log.d(TAG, "hook到了" + methodName);
-                            }
-
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                for (int i = 0; i < param.args.length; i++) {
-                                    if (param.args[i] instanceof byte[]) {
-                                        Log.d(TAG, "参数[" + i + "]:" + byteArrayToString((byte[]) param.args[i]));
-                                        writeFile("参数[" + i + "]:(" + byteArrayToString((byte[]) param.args[i]) + ")\n");
-                                    } else {
-                                        Log.d(TAG, "参数[" + i + "]:" + param.args[i].toString());
-                                        writeFile("参数[" + i + "]:" + param.args[i].toString() + "\n");
-                                    }
-                                }
-                                Log.d(TAG, "返回值：" + param.getResult());
-                                writeFile("返回值：" + param.getResult() + "\n");
-                            }
-                        });
+                        hook(m);
                         break;
                     }
                     case 1: {
                         Constructor<?> m = XposedHelpers.findConstructorExact(claszz, paramList);
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
-                                Log.d(TAG, "hook到了" + className);
-                            }
-
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                                super.afterHookedMethod(param);
-                                for (int i = 0; i < param.args.length; i++) {
-                                    if (param.args[i] instanceof byte[]) {
-                                        Log.d(TAG, "参数[" + i + "]:" + byteArrayToString((byte[]) param.args[i]));
-                                        writeFile("参数[" + i + "]:(" + byteArrayToString((byte[]) param.args[i]) + ")或者(" + toHexString((byte[]) param.args[i]) + ")\n");
-                                    } else {
-                                        Log.d(TAG, "参数[" + i + "]:" + param.args[i].toString());
-                                        writeFile("参数[" + i + "]:" + param.args[i].toString() + "\n");
-                                    }
-                                }
-                            }
-                        });
+                        hook(m);
                         break;
                     }
                     default: {
                         Log.d(TAG, "建设中。。。");
                     }
                 }
+            } catch (Exception e) {
+                Log.d(TAG, "easyHook: " + e);
+                findContext();
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            Log.d(TAG, "easyHook: " + e);
         }
+    }
+
+    private void findContext() {
+        XposedHelpers.findAndHookMethod(ClassLoader.class, "loadClass", String.class, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                if (!param.hasThrowable()) {
+                    try {
+                        String strClazz = param.args[0].toString();
+                        if (!strClazz.startsWith("android.")
+                                && !strClazz.startsWith(".system")
+                                && !strClazz.startsWith("androidx.")
+                                && !strClazz.startsWith("java.")
+                                && !strClazz.startsWith("org.")
+                                && !strClazz.contains("umeng.")
+                                && !strClazz.contains("easyhook.")
+                                && !strClazz.contains("com.google")
+                                // && !strClazz.contains(".alipay")
+                                && !strClazz.contains(".netease")
+                                // && !strClazz.contains(".alibaba")
+                                && !strClazz.contains(".pgyersdk")
+                                && !strClazz.contains(".daohen")
+                                && !strClazz.contains("mini")
+                                && !strClazz.contains("xposed")) {
+                            Class<?> clazz = (Class<?>) param.getResult();
+                            synchronized (this.getClass()) {
+                                strClassName = strClazz;
+                                // 获取被hook的目标类的名称
+                                if (strClazz.equals(className)) {
+                                    Log.d(TAG, "loadClass: " + strClazz);
+                                    Method[] methods = clazz.getDeclaredMethods();
+                                    // 遍历类的所有方法
+                                    if (methods.length > 0) {
+                                        for (Method method : methods) {
+                                            if (method.getName().equals(methodName)) {
+                                                hook(method);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                    } catch (Exception e) {
+                    }
+                }
+            }
+        });
+    }
+
+    private void hook(Member m) {
+        Log.d(TAG, "method-tostring: " + m.toString());
+        XposedBridge.hookMethod(m, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                Log.d(TAG, "hook到了" + m.toString());
+                writeFile("hook到了" + m.toString() + "\n");
+            }
+
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                for (int i = 0; i < param.args.length; i++) {
+                    if (param.args[i] instanceof byte[]) {
+                        Log.d(TAG, "参数[" + i + "]:" + byteArrayToString((byte[]) param.args[i]));
+                        writeFile("参数[" + i + "]:(" + byteArrayToString((byte[]) param.args[i]) + ")或者(" + toHexString((byte[]) param.args[i]) + ")\n");
+                    } else {
+                        Log.d(TAG, "参数[" + i + "]:" + param.args[i].toString());
+                        writeFile("参数[" + i + "]:" + param.args[i].toString() + "\n");
+                    }
+                }
+                try {
+                    Log.d(TAG, "返回值：" + param.getResult());
+                    writeFile("返回值：" + param.getResult() + "\n");
+                } catch (Exception e) {
+                    Log.e(TAG, "line 195:" + e);
+                }
+            }
+        });
     }
 
     public static String toHexString(final byte[] byteArray) {
@@ -164,7 +207,7 @@ public class HookModule implements IXposedHookLoadPackage {
         }
     }
 
-    private void getValue(XC_LoadPackage.LoadPackageParam lpparam) {
+    private void getValue(ClassLoader classLoader) {
         File sdcardDir = Environment.getExternalStorageDirectory();
         String filePath = sdcardDir.getAbsolutePath() + "/hookTarget.txt";
         try {
@@ -213,7 +256,7 @@ public class HookModule implements IXposedHookLoadPackage {
                         try {
                             paramList[i] = Class.forName(strList[i]);
                         } catch (Exception e) {
-                            paramList[i] = lpparam.classLoader.loadClass(strList[i]);
+                            paramList[i] = classLoader.loadClass(strList[i]);
                         }
                         break;
                 }
