@@ -1,5 +1,6 @@
 package com.zhaol.easyhook;
 
+import android.annotation.SuppressLint;
 import android.app.Service;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -15,9 +16,12 @@ import android.os.IBinder;
 import android.os.Message;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -31,7 +35,11 @@ import java.io.FileReader;
 
 import static java.lang.Thread.sleep;
 
-public class FloatingService extends Service {
+public class FloatingService extends Service implements View.OnClickListener {
+    private static final int WINDOW_WIDTH = (int) (MainActivity.SCREEN_WIDTH * 0.8);
+    private static final int WINDOW_HEIGHT = (int) (MainActivity.SCREEN_HEIGHT * 0.32);
+    private static final int WINDOW_MINI_HEIGHT = 100;
+
     public FloatingService() {
     }
 
@@ -41,15 +49,17 @@ public class FloatingService extends Service {
     private boolean running = false;
     private TextView hookResult;
     private ScrollView scrollView;
-    private LinearLayout linearLayout;
-    private TextView clear;
+    private FrameLayout flContainer;
     private Handler handler = null;
-    private TextView move;
+
+    private ImageView ivExpand;
+    private ImageView ivMini;
+    private ImageView ivClear;
+    private ImageView ivDrag;
+
 
     @Override
     public IBinder onBind(Intent intent) {
-        // TODO: Return the communication channel to the service.
-        // throw new UnsupportedOperationException("Not yet implemented");
         return new MyBinder();
     }
 
@@ -67,8 +77,8 @@ public class FloatingService extends Service {
         layoutParams.format = PixelFormat.RGBA_8888;
         layoutParams.gravity = Gravity.LEFT | Gravity.TOP;
         layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-        layoutParams.width = (int) (MainActivity.SCREEN_WIDTH * 0.6);
-        layoutParams.height = (int) (MainActivity.SCREEN_HEIGHT * 0.32);
+        layoutParams.width = WINDOW_WIDTH;
+        layoutParams.height = WINDOW_HEIGHT;
         layoutParams.x = 0;
         layoutParams.y = 50;
 
@@ -93,13 +103,45 @@ public class FloatingService extends Service {
 
     public void closeWindow() {
         try {
-            windowManager.removeView(linearLayout);
+            windowManager.removeView(flContainer);
             running = false;
             MainActivity.isFloatServiceRunning = false;
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
+
+    @SuppressLint("NonConstantResourceId")
+    @Override
+    public void onClick(View v) {
+        int id = v.getId();
+        switch (id) {
+            case R.id.iv_clear:
+                clearContent();
+                break;
+            case R.id.iv_close:
+                closeWindow();
+                break;
+            case R.id.iv_expand:
+                expandAndMiniWindow(false);
+                break;
+            case R.id.iv_mini:
+                expandAndMiniWindow(true);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void expandAndMiniWindow(boolean isMini) {
+        layoutParams.height = isMini ? WINDOW_MINI_HEIGHT : WINDOW_HEIGHT;
+        windowManager.updateViewLayout(flContainer, layoutParams);
+        ivClear.setVisibility(isMini ? View.INVISIBLE : View.VISIBLE);
+        ivMini.setVisibility(isMini ? View.INVISIBLE : View.VISIBLE);
+        ivDrag.setVisibility(isMini ? View.INVISIBLE : View.VISIBLE);
+        ivExpand.setVisibility(isMini ? View.VISIBLE : View.INVISIBLE);
+    }
+
 
     public class MyBinder extends Binder {
         public void closewindow() {
@@ -163,10 +205,10 @@ public class FloatingService extends Service {
     }
 
     private void show() {
+        flContainer = (FrameLayout) LayoutInflater.from(getApplicationContext()).inflate(R.layout.float_window_view, null);
         hookResult = new TextView(getApplicationContext());
         hookResult.setTextColor(Color.WHITE);
         hookResult.setTextSize(12);
-        hookResult.setBackgroundColor(Color.BLACK);
         hookResult.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         hookResult.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
@@ -178,63 +220,32 @@ public class FloatingService extends Service {
                 return false;
             }
         });
-
-        clear = new TextView(getApplicationContext());
-        clear.setText("清空");
-        clear.setTextSize(12);
-        clear.setBackgroundColor(Color.GRAY);
-        clear.setTextColor(Color.RED);
-
-        move = new TextView(getApplicationContext());
-        move.setBackgroundColor(Color.GRAY);
-        move.setText("  X  ");
-        move.setGravity(Gravity.RIGHT);
-        move.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, 40));
-
-
-        clear.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
-
-        scrollView = new ScrollView(getApplicationContext());
-        scrollView.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (int) (MainActivity.SCREEN_HEIGHT * 0.32) - 80));
+        ivDrag = flContainer.findViewById(R.id.iv_drag);
+        ivMini = flContainer.findViewById(R.id.iv_mini);
+        ivMini.setOnClickListener(this);
+        ImageView ivClose = flContainer.findViewById(R.id.iv_close);
+        ivClose.setOnClickListener(this);
+        ivClear = flContainer.findViewById(R.id.iv_clear);
+        ivClear.setOnClickListener(this);
+        ivExpand = flContainer.findViewById(R.id.iv_expand);
+        ivExpand.setOnClickListener(this);
+        scrollView = flContainer.findViewById(R.id.scrollview);
         scrollView.addView(hookResult);
+        windowManager.addView(flContainer, layoutParams);
 
-        linearLayout = new LinearLayout(getApplicationContext());
-        linearLayout.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (int) (MainActivity.SCREEN_HEIGHT * 0.32)));
-        linearLayout.setOrientation(LinearLayout.VERTICAL);
-        linearLayout.setBackgroundColor(Color.BLACK);
-        linearLayout.setGravity(Gravity.RIGHT);
-        linearLayout.setAlpha((float) 0.555);
-
-        linearLayout.addView(move);
-        linearLayout.addView(scrollView);
-        linearLayout.addView(clear);
-
-        clear.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                File sdcardDir = Environment.getExternalStorageDirectory();
-                String resultPath = sdcardDir.getAbsolutePath() + "/hookResult.txt";
-                File file = new File(resultPath);
-                try {
-                    file.delete();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-
-        move.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                closeWindow();
-            }
-        });
-
-
-        windowManager.addView(linearLayout, layoutParams);
-
-        linearLayout.setOnTouchListener(new FloatingOnTouchListener());
+        flContainer.setOnTouchListener(new FloatingOnTouchListener());
         running = true;
+    }
+
+    private void clearContent() {
+        File sdcardDir = Environment.getExternalStorageDirectory();
+        String resultPath = sdcardDir.getAbsolutePath() + "/hookResult.txt";
+        File file = new File(resultPath);
+        try {
+            file.delete();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private class FloatingOnTouchListener implements View.OnTouchListener {
@@ -257,7 +268,7 @@ public class FloatingService extends Service {
                     y = nowY;
                     layoutParams.x = layoutParams.x + movedX;
                     layoutParams.y = layoutParams.y + movedY;
-                    windowManager.updateViewLayout(linearLayout, layoutParams);
+                    windowManager.updateViewLayout(flContainer, layoutParams);
                     break;
                 default:
                     break;
