@@ -1,7 +1,5 @@
 package com.zhaol.easyhook;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
@@ -14,13 +12,15 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -30,11 +30,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
-
+    private static final String EMPTY_TAG = "-@82%$";
     private EditText packageET = null;
     private EditText classET = null;
     private EditText methodET = null;
-    private EditText paramET = null;
     private String filePath = null;
 
 
@@ -53,9 +52,7 @@ public class MainActivity extends AppCompatActivity {
         packageET = findViewById(R.id.packageName);
         classET = findViewById(R.id.className);
         methodET = findViewById(R.id.methodName);
-        paramET = findViewById(R.id.paramList);
         Button submitBt = findViewById(R.id.submit);
-        // clearBt = findViewById(R.id.clear);
         Button showFloatBt = findViewById(R.id.showFloat);
         DisplayMetrics metrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(metrics);
@@ -73,23 +70,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        Button stringBt = findViewById(R.id.stringBt);
-        stringBt.setOnClickListener(v -> addValue("String.class"));
-        Button intBt = findViewById(R.id.intBt);
-        intBt.setOnClickListener(v -> addValue("int.class"));
-        Button byteBt = findViewById(R.id.byteBt);
-        byteBt.setOnClickListener(v -> addValue("byte[].class"));
-        Button booleanBt = findViewById(R.id.booleanBt);
-        booleanBt.setOnClickListener(v -> addValue("boolean.class"));
-        Button shortBt = findViewById(R.id.shortBt);
-        shortBt.setOnClickListener(v -> addValue("short.class"));
-        Button longBt = findViewById(R.id.longBt);
-        longBt.setOnClickListener(v -> addValue("long.class"));
-        Button doubleBt = findViewById(R.id.doubleBt);
-        doubleBt.setOnClickListener(v -> addValue("double.class"));
-        Button floatBt = findViewById(R.id.floatBt);
-        floatBt.setOnClickListener(v -> addValue("float.class"));
-
         File sdcardDir = Environment.getExternalStorageDirectory();
         filePath = sdcardDir.getAbsolutePath() + "/hookTarget.txt";
 
@@ -98,14 +78,15 @@ public class MainActivity extends AppCompatActivity {
         initValue();
 
         submitBt.setOnClickListener(v -> {
+            String methodStr = methodET.getText().toString();
             StringBuilder sb = new StringBuilder();
             sb.append(packageET.getText().toString());
             sb.append("_&_");
             sb.append(classET.getText().toString());
-            sb.append("_&_");
-            sb.append(methodET.getText().toString());
-            sb.append("_&_");
-            sb.append(paramET.getText().toString());
+            if (TextUtils.isEmpty(methodStr)) {
+                sb.append("_&_");
+                sb.append(EMPTY_TAG);
+            }
             sb.append("_&_");
             sb.append(sp.getSelectedItemId());
             File file = new File(filePath);
@@ -127,25 +108,6 @@ public class MainActivity extends AppCompatActivity {
         sp = findViewById(R.id.hookType);
         sp.setPrompt("选择hook类型");
         sp.setAdapter(starAdapter);
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-//        conn = new MyServiceConnection();
-//        bindService(new Intent(MainActivity.this, FloatingService.class), conn, Context.BIND_ABOVE_CLIENT);
-    }
-
-    private void addValue(String s) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(paramET.getText().toString());
-        String TAG = "easy_Hook";
-        Log.d(TAG, paramET.getText().toString());
-        if (!paramET.getText().toString().endsWith(",") && !paramET.getText().toString().equals("")) {
-            sb.append(",");
-        }
-        sb.append(s);
-        paramET.setText(sb.toString());
     }
 
     private void requestPermission() {
@@ -173,9 +135,9 @@ public class MainActivity extends AppCompatActivity {
             String[] str = line.split("_&_");
             packageET.setText(str[0]);
             classET.setText(str[1]);
-            methodET.setText(str[2]);
-            paramET.setText(str[3]);
-            sp.setSelection(Integer.parseInt(str[4]));
+            methodET.setText(EMPTY_TAG.equals(str[2]) ? "" : str[2]);
+            int type = Integer.parseInt(str[3]);
+            sp.setSelection(type);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
